@@ -156,7 +156,61 @@ class LPResult(Enum):
     INFEASIBLE = 2
     UNBOUNDED = 3
 
+#D.B = array of indices of basic variables
+#D.N = array of indices of non-basic variables
+#A = coefficients of variables in constraints
+#c = coefficients of objective function
+#b = values of basic variables
+
 def bland(D,eps):
+    print(D)
+    obj_coeff = D.C[0, 1:]
+    constraint_coeff = D.C[1:, 1:]
+    constraint_constants = D.C[1:, 0]
+    entering=None
+    for index in range(len(obj_coeff)):
+        temp = obj_coeff[index]
+        if( temp > 0):
+            entering = index
+    
+    if(entering is None):
+        return None, None
+    
+    leaving=None
+    tightest_ratio = np.inf 
+    candidates =[]
+    for index in range(constraint_coeff.shape(1)):
+        coefficient = D.A[index][entering] 
+        ratio = ratio(coefficient, D.B[index])
+        
+        if ( ratio < tightest_ratio & ratio >= 0):
+            tightest_ratio = ratio
+            candidates = []
+            candidates.append(constraint_constants[index])
+            
+        elif (ratio == tightest_ratio):
+            candidates.append(constraint_constants[index])
+    
+    leaving = candidates.min()
+    return entering, leaving
+    
+def ratio(x, y, eps):
+    temp = x/y
+    if np.abs(temp) < eps:
+        temp = 0 #eps>=0 is such that numbers in the closed interval [-eps,eps]
+    return temp
+    # x1+w2+x3
+       
+    # B(0)=x1
+    # B(1)=w2
+
+    # N(1)= x1 
+    # N(2)= x2
+    # N(n+1)=w1 
+
+    #iterate over variables in objective func and store vars with positive coeffienct
+ 
+
     # Assumes a feasible dictionary D and finds entering and leaving
     # variables according to Bland's rule.
     #
@@ -169,10 +223,12 @@ def bland(D,eps):
     # l is None if D is Unbounded
     # Otherwise D.B[l] is a leaving variable
        
-    k=l=None
-    # TODO
-    return k,l
+    # k=l=None
+    # # TODO
+    # return k,l
     
+
+
 def largest_coefficient(D,eps):
     # Assumes a feasible dictionary D and find entering and leaving
     # variables according to the Largest Coefficient rule.
@@ -234,9 +290,22 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     return None,None
   
 def run_examples():
+
+    #ratiotest
+    ratio_test = ratio(0.00001,1, 1e-5)
+    print("ratio Tets")
+    print(ratio_test)
     # Example 1
     c,A,b = example1()
     D=Dictionary(c,A,b)
+    str(D)
+    print(D)
+    bland(D,1e-3)
+    print(D.B)
+    print(D.N)
+    print(A)
+    print(c)
+    print(b)
     print('Example 1 with Fraction')
     print('Initial dictionary:')
     print(D)
@@ -260,86 +329,89 @@ def run_examples():
     print(D)
     print()
 
-    # Example 2
-    c,A,b = example2()
-    print('Example 2')
-    print('Auxillary dictionary')
-    D=Dictionary(None,A,b)
-    print(D)
-    print('x0 is entering and x4 leaving:')
-    D.pivot(2,1)
-    print(D)
-    print('x2 is entering and x3 leaving:')
-    D.pivot(1,0)
-    print(D)
-    print('x1 is entering and x0 leaving:')
-    D.pivot(0,1)
-    print(D)
-    print()
+    # # Example 2
+    # c,A,b = example2()
+    # print('Example 2')
+    # print('Auxillary dictionary')
+    # D=Dictionary(None,A,b)
+    # print(D)
+    # print('x0 is entering and x4 leaving:')
+    # D.pivot(2,1)
+    # print(D)
+    # print('x2 is entering and x3 leaving:')
+    # D.pivot(1,0)
+    # print(D)
+    # print('x1 is entering and x0 leaving:')
+    # D.pivot(0,1)
+    # print(D)
+    # print()
 
-    # Solve Example 1 using lp_solve
-    c,A,b = example1()
-    print('lp_solve Example 1:')
-    res,D=lp_solve(c,A,b)
-    print(res)
-    print(D)
-    print()
+    # # Solve Example 1 using lp_solve
+    # c,A,b = example1()
+    # print('lp_solve Example 1:')
+    # res,D=lp_solve(c,A,b)
+    # print(res)
+    # print(D)
+    # print()
 
-    # Solve Example 2 using lp_solve
-    c,A,b = example2()
-    print('lp_solve Example 2:')
-    res,D=lp_solve(c,A,b)
-    print(res)
-    print(D)
-    print()
+    # # Solve Example 2 using lp_solve
+    # c,A,b = example2()
+    # print('lp_solve Example 2:')
+    # res,D=lp_solve(c,A,b)
+    # print(res)
+    # print(D)
+    # print()
 
-    # Solve Exercise 2.5 using lp_solve
-    c,A,b = exercise2_5()
-    print('lp_solve Exercise 2.5:')
-    res,D=lp_solve(c,A,b)
-    print(res)
-    print(D)
-    print()
+    # # Solve Exercise 2.5 using lp_solve
+    # c,A,b = exercise2_5()
+    # print('lp_solve Exercise 2.5:')
+    # res,D=lp_solve(c,A,b)
+    # print(res)
+    # print(D)
+    # print()
 
-    # Solve Exercise 2.6 using lp_solve
-    c,A,b = exercise2_6()
-    print('lp_solve Exercise 2.6:')
-    res,D=lp_solve(c,A,b)
-    print(res)
-    print(D)
-    print()
+    # # Solve Exercise 2.6 using lp_solve
+    # c,A,b = exercise2_6()
+    # print('lp_solve Exercise 2.6:')
+    # res,D=lp_solve(c,A,b)
+    # print(res)
+    # print(D)
+    # print()
 
-    # Solve Exercise 2.7 using lp_solve
-    c,A,b = exercise2_7()
-    print('lp_solve Exercise 2.7:')
-    res,D=lp_solve(c,A,b)
-    print(res)
-    print(D)
-    print()
+    # # Solve Exercise 2.7 using lp_solve
+    # c,A,b = exercise2_7()
+    # print('lp_solve Exercise 2.7:')
+    # res,D=lp_solve(c,A,b)
+    # print(res)
+    # print(D)
+    # print()
 
-    #Integer pivoting
-    c,A,b=example1()
-    D=Dictionary(c,A,b,int)
-    print('Example 1 with int')
-    print('Initial dictionary:')
-    print(D)
-    print('x1 is entering and x4 leaving:')
-    D.pivot(0,0)
-    print(D)
-    print('x3 is entering and x6 leaving:')
-    D.pivot(2,2)
-    print(D)
-    print()
+    # #Integer pivoting
+    # c,A,b=example1()
+    # D=Dictionary(c,A,b,int)
+    # print('Example 1 with int')
+    # print('Initial dictionary:')
+    # print(D)
+    # print('x1 is entering and x4 leaving:')
+    # D.pivot(0,0)
+    # print(D)
+    # print('x3 is entering and x6 leaving:')
+    # D.pivot(2,2)
+    # print(D)
+    # print()
 
-    c,A,b = integer_pivoting_example()
-    D=Dictionary(c,A,b,int)
-    print('Integer pivoting example from lecture')
-    print('Initial dictionary:')
-    print(D)
-    print('x1 is entering and x3 leaving:')
-    D.pivot(0,0)
-    print(D)
-    print('x2 is entering and x4 leaving:')
-    D.pivot(1,1)
-    print(D)
+    # c,A,b = integer_pivoting_example()
+    # D=Dictionary(c,A,b,int)
+    # print('Integer pivoting example from lecture')
+    # print('Initial dictionary:')
+    # print(D)
+    # print('x1 is entering and x3 leaving:')
+    # D.pivot(0,0)
+    # print(D)
+    # print('x2 is entering and x4 leaving:')
+    # D.pivot(1,1)
+    # print(D)
+
+
+run_examples();
 
