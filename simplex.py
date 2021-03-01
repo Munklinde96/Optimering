@@ -144,10 +144,23 @@ class Dictionary:
     def pivot(self,k,l):
         # Pivot Dictionary with N[k] entering and B[l] leaving
         # Performs integer pivoting if self.dtype==int
-
+        
         # save pivot coefficient
         a = self.C[l+1,k+1]
-        # TODO
+        # swap index of entering and leaving var in index array
+        leaving = self.B[l]
+        entering = self.N[k]
+        self.N[k] = leaving
+        self.B[l] = entering 
+        for row_index in range(self.C[:,0].size):  #subtract/add leaving var to all other rows
+            if(row_index != l+1):
+                leaving_value = self.C[row_index, k+1]
+                leaving_ratio = ratio(leaving_value, a)
+                self.C[row_index, :] = self.C[row_index, :] - leaving_ratio * self.C[l+1, :]
+                self.C[row_index, k+1] = leaving_ratio
+
+        self.C[l+1,k+1] = -self.C[l+1,k+1]/self.C[l+1,k+1]  #swap leaving and entering
+        self.C[l+1,:] = self.C[l+1,:]/(-a)  #normalize by B[L] coefficient
         pass
 
 
@@ -163,54 +176,6 @@ class LPResult(Enum):
 #b = values of basic variables
 
 def bland(D,eps):
-    print(D)
-    obj_coeff = D.C[0, 1:]
-    constraint_coeff = D.C[1:, 1:]
-    constraint_constants = D.C[1:, 0]
-    entering=None
-    for index in range(len(obj_coeff)):
-        temp = obj_coeff[index]
-        if( temp > 0):
-            entering = index
-    
-    if(entering is None):
-        return None, None
-    
-    leaving=None
-    tightest_ratio = np.inf 
-    candidates =[]
-    for index in range(constraint_coeff.shape(1)):
-        coefficient = D.A[index][entering] 
-        ratio = ratio(coefficient, D.B[index])
-        
-        if ( ratio < tightest_ratio & ratio >= 0):
-            tightest_ratio = ratio
-            candidates = []
-            candidates.append(constraint_constants[index])
-            
-        elif (ratio == tightest_ratio):
-            candidates.append(constraint_constants[index])
-    
-    leaving = candidates.min()
-    return entering, leaving
-    
-def ratio(x, y, eps):
-    temp = x/y
-    if np.abs(temp) < eps:
-        temp = 0 #eps>=0 is such that numbers in the closed interval [-eps,eps]
-    return temp
-    # x1+w2+x3
-       
-    # B(0)=x1
-    # B(1)=w2
-
-    # N(1)= x1 
-    # N(2)= x2
-    # N(n+1)=w1 
-
-    #iterate over variables in objective func and store vars with positive coeffienct
- 
-
     # Assumes a feasible dictionary D and finds entering and leaving
     # variables according to Bland's rule.
     #
@@ -222,12 +187,53 @@ def ratio(x, y, eps):
     # Otherwise D.N[k] is entering variable
     # l is None if D is Unbounded
     # Otherwise D.B[l] is a leaving variable
-       
-    # k=l=None
-    # # TODO
-    # return k,l
-    
 
+    obj_coeff = D.C[0, 1:]
+    constraint_coeff = D.C[1:, 1:]
+    constraint_constants = D.C[1:, 0]
+    entering=None
+    index_of_entering= np.inf
+    #find entering variable:
+    for index in range(len(obj_coeff)):
+        temp = obj_coeff[index]
+        if( temp > 0 and D.N[index] < index_of_entering):
+            index_of_entering = D.N[index]
+            entering = index
+    
+    if(entering is None):
+        return None, None
+    
+    leaving=None
+    tightest_ratio = -np.inf 
+    leaving_candidates = []
+    constraint_coeff_entering = constraint_coeff[:,entering]
+    #find leaving variable
+    for index in range(constraint_coeff_entering.size):
+        coefficient_entering = constraint_coeff_entering[index]
+        constraint_constant = constraint_constants[index]
+        constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
+        if ( constraint_ratio > tightest_ratio and constraint_ratio < 0):
+            tightest_ratio = constraint_ratio
+            leaving_candidates = []
+            leaving_candidates.append(D.B[index])
+            
+        elif (constraint_ratio == tightest_ratio):
+            leaving_candidates.append(D.B[index])
+    
+    best = min(leaving_candidates)
+    
+    for index in range(D.B.size):
+        if (D.B[index] == best):
+            leaving = index
+    return entering, leaving
+    
+def ratio(x, y, eps=1e-5):
+    if( y == 0):
+        return 0
+    temp = x/y
+    if np.abs(temp) < eps:
+        temp = 0 #eps>=0 is such that numbers in the closed interval [-eps,eps]
+    return temp
 
 def largest_coefficient(D,eps):
     # Assumes a feasible dictionary D and find entering and leaving
@@ -265,7 +271,7 @@ def largest_increase(D,eps):
 
 def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbose=False):
     # Simplex algorithm
-    #    
+    # 
     # Input is LP in standard form given by vectors and matrices
     # c,A,b.
     #
@@ -285,49 +291,48 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     #
     # If LP has an optimal solution the return value is
     # LPResult.OPTIMAL,D, where D is an optimal dictionary.
-
+    
     #TODO
-    return None,None
+    D = Dictionary(c, A, b)
+    k,l = pivotrule(D)
+    res = None, None
+    while (k != None and l != None):
+        D.pivot(k,l)
+        k, l = pivotrule(D)
+    if(k != None and l == None):
+        res = LPResult.UNBOUNDED, None
+    if(k == None):
+        res = LPResult.OPTIMAL, D
+    return res
   
 def run_examples():
 
     #ratiotest
-    ratio_test = ratio(0.00001,1, 1e-5)
-    print("ratio Tets")
-    print(ratio_test)
     # Example 1
-    c,A,b = example1()
-    D=Dictionary(c,A,b)
-    str(D)
-    print(D)
-    bland(D,1e-3)
-    print(D.B)
-    print(D.N)
-    print(A)
-    print(c)
-    print(b)
-    print('Example 1 with Fraction')
-    print('Initial dictionary:')
-    print(D)
-    print('x1 is entering and x4 leaving:')
-    D.pivot(0,0)
-    print(D)
-    print('x3 is entering and x6 leaving:')
-    D.pivot(2,2)
-    print(D)
-    print()
+    # c,A,b = example1()
+    # D=Dictionary(c,A,b)
+    # print('Example 1 with Fraction')
+    # print('Initial dictionary:')
+    # print(D)
+    # print('x1 is entering and x4 leaving:')
+    # D.pivot(0,0)
+    # print(D)
+    # print('x3 is entering and x6 leaving:')
+    # D.pivot(2,2)
+    # print(D)
+    # print()
 
-    D=Dictionary(c,A,b,np.float64)
-    print('Example 1 with np.float64')
-    print('Initial dictionary:')
-    print(D)
-    print('x1 is entering and x4 leaving:')
-    D.pivot(0,0)
-    print(D)
-    print('x3 is entering and x6 leaving:')
-    D.pivot(2,2)
-    print(D)
-    print()
+    # D=Dictionary(c,A,b,np.float64)
+    # print('Example 1 with np.float64')
+    # print('Initial dictionary:')
+    # print(D)
+    # print('x1 is entering and x4 leaving:')
+    # D.pivot(0,0)
+    # print(D)
+    # print('x3 is entering and x6 leaving:')
+    # D.pivot(2,2)
+    # print(D)
+    # print()
 
     # # Example 2
     # c,A,b = example2()
@@ -346,13 +351,13 @@ def run_examples():
     # print(D)
     # print()
 
-    # # Solve Example 1 using lp_solve
-    # c,A,b = example1()
-    # print('lp_solve Example 1:')
-    # res,D=lp_solve(c,A,b)
-    # print(res)
-    # print(D)
-    # print()
+    # Solve Example 1 using lp_solve
+    c,A,b = example1()
+    print('lp_solve Example 1:')
+    res,D=lp_solve(c,A,b)
+    print(res)
+    print(D)
+    print()
 
     # # Solve Example 2 using lp_solve
     # c,A,b = example2()
