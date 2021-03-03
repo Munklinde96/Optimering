@@ -1,6 +1,9 @@
 import numpy as np
 from fractions import Fraction
 from enum import Enum
+import time
+import matplotlib.pyplot as plt
+from scipy.optimize import linprog
 
 def example1(): return np.array([5,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
 def example2(): return np.array([-2,-1]),np.array([[-1,1],[-1,-2],[0,1]]),np.array([-1,-2,1])
@@ -152,13 +155,15 @@ class Dictionary:
         entering = self.N[k]
         self.N[k] = leaving
         self.B[l] = entering 
+        t0 = time.time()
         for row_index in range(self.C[:,0].size):  #subtract/add leaving var to all other rows
             if(row_index != l+1):
                 leaving_value = self.C[row_index, k+1]
                 leaving_ratio = ratio(leaving_value, a)
-                self.C[row_index, :] = self.C[row_index, :] - leaving_ratio * self.C[l+1, :]
+                c = self.C[row_index, :]
+                s = leaving_ratio * self.C[l+1, :]
+                self.C[row_index, :] = c - s
                 self.C[row_index, k+1] = leaving_ratio
-
         self.C[l+1,k+1] = -self.C[l+1,k+1]/self.C[l+1,k+1]  #swap leaving and entering
         self.C[l+1,:] = self.C[l+1,:]/(-a)  #normalize by B[L] coefficient
         pass
@@ -219,7 +224,10 @@ def bland(D,eps):
             
         elif (constraint_ratio == tightest_ratio):
             leaving_candidates.append(D.B[index])
-    
+
+    if(len(leaving_candidates) is 0):
+        return entering, None
+
     best = min(leaving_candidates)
     
     for index in range(D.B.size):
@@ -292,7 +300,6 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     # If LP has an optimal solution the return value is
     # LPResult.OPTIMAL,D, where D is an optimal dictionary.
     
-    #TODO
     D = Dictionary(c, A, b)
     k,l = pivotrule(D)
     res = None, None
@@ -304,11 +311,114 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     if(k == None):
         res = LPResult.OPTIMAL, D
     return res
-  
-def run_examples():
 
+
+def run_experiment_1phase_alg(no_of_iterations):
+
+    iterations_results_float = []
+    iterations_results_fraction = []
+    
+    for i in range(no_of_iterations):
+        #The formulas for m and n produce numbers between 10 and 100.
+        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        print("started running")
+        c,A,b = random_lp(n,m)
+        print("m is: "+ str(m))
+        print("n is: "+ str(n))
+
+        t0 = time.time()
+        res = linprog(c,A,b)
+        t1 = time.time()
+        total_time_scipy = t1-t0
+        print("finished SciPy in time:" + str(total_time_scipy))
+        
+        t0 = time.time()
+        res_float, D = lp_solve(c,A,b, dtype = np.float64)
+        t1 = time.time()
+        total_time_float = t1-t0
+        print("finished float64 in time:" + str(total_time_float))
+        t2 = time.time()
+        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
+        t3 = time.time()   
+        total_time_fraction = t3-t2
+        print("finished Fraction in time:" + str(total_time_fraction))
+        iterations_results_float.append((n,m,total_time_float, res_float))
+        iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
+    
+    np.save("./results/iterations_results_float.npy",iterations_results_float, allow_pickle = True)
+    np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
+
+    
+def print_experiment(array1, array2):
+    fig=plt.figure()
+    arr_n_plus_m = [_tuple[0]+_tuple[1] for _tuple in array1]
+    arr1_time = [_tuple[2] for _tuple in array1]
+    arr2_time = [_tuple[2] for _tuple in array2]
+    plt.scatter(arr_n_plus_m, arr1_time, color='r', marker = "x", label ="fraction")
+    plt.scatter(arr_n_plus_m, arr2_time, color='b', marker = "o", label ="float")
+    plt.xlabel('n+m')
+    plt.ylabel('Time')
+    plt.title('Time experiment for n+m')
+    plt.legend()
+    plt.show()
+
+def get_dual_dictionary(primal_dictionary):
+    dual_dictionary = primal_dictionary
+    dual_dictionary.C = -np.transpose(primal_dictionary.C)
+    non_basic_size = primal_dictionary.N.size
+    basic_size = primal_dictionary.B.size
+    # dual_dictionary.B = np.zeros(primal_dictionary.N.size)
+    # dual_dictionary.N = np.zeros(primal_dictionary.B.size)
+    for index in range(non_basic_size):
+        if(primal_dictionary.N[index] < non_basic_size):
+            dual_dictionary.B[index] = primal_dictionary.N[index] + basic_size
+        else: dual_dictionary.B[index] =  primal_dictionary.N[index] - non_basic_size
+
+    for index in range(basic_size):
+        if(primal_dictionary.B[index] <= non_basic_size):
+            dual_dictionary.N[index] = primal_dictionary.B[index] + basic_size
+        else: dual_dictionary.N[index] =  primal_dictionary.B[index] - non_basic_size
+    return dual_dictionary
+    
+
+
+def phase1_alg(D):
+    # for ele in D.C[0, 1:]: #[0,-1,-1,...]
+    #     ele = -ele/ele
+    #     print(ele)
+    # D.C[0,0] = 0
+    D.C[0, 1:] = -(np.ones(D.C[0, 1:].size))
+    dual_D = get_dual_dictionary(D)
+    print(dual_D)
+
+    k,l = bland(dual_D, 1e-5)
+    print(k)
+    print(l)
+    D.pivot(l,k)
+    print(D)
+
+    # do dual equivalent pivotting in primal
+    # find dual - call bland(dual-D) call pivot (k,l) with primal
+    # find pivot (k,l) in dual then call pivot(k,l)
+    # substitute the answer from feasable dictionary into obj function from original primal problem 
+    #
+
+
+def run_examples():
+    arr1 = np.load("./results/iterations_results_fraction.npy",  allow_pickle = True)
+    arr2 = np.load("./results/iterations_results_float.npy",  allow_pickle = True)
+    #print_experiment(arr1,arr2)
+
+    c,A,b = exercise2_7()
+    d = Dictionary(c,A,b)
+    phase1_alg(d)
+
+
+
+    #run_experiment_1phase_alg(100)
     #ratiotest
-    # Example 1
+    #Example 1
     # c,A,b = example1()
     # D=Dictionary(c,A,b)
     # print('Example 1 with Fraction')
@@ -352,9 +462,11 @@ def run_examples():
     # print()
 
     # Solve Example 1 using lp_solve
-    c,A,b = example1()
+    c,A,b = exercise2_7()
+    d = Dictionary(c,A,b)
     print('lp_solve Example 1:')
     res,D=lp_solve(c,A,b)
+    get_dual_dictionary(d)
     print(res)
     print(D)
     print()
