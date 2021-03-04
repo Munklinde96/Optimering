@@ -4,6 +4,7 @@ from enum import Enum
 import time
 import matplotlib.pyplot as plt
 from scipy.optimize import linprog
+import copy
 
 def example1(): return np.array([5,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
 def example2(): return np.array([-2,-1]),np.array([[-1,1],[-1,-2],[0,1]]),np.array([-1,-2,1])
@@ -225,7 +226,7 @@ def bland(D,eps):
         elif (constraint_ratio == tightest_ratio):
             leaving_candidates.append(D.B[index])
 
-    if(len(leaving_candidates) is 0):
+    if(len(leaving_candidates) == 0):
         return entering, None
 
     best = min(leaving_candidates)
@@ -363,22 +364,29 @@ def print_experiment(array1, array2):
     plt.legend()
     plt.show()
 
+
+
 def get_dual_dictionary(primal_dictionary):
-    dual_dictionary = primal_dictionary
+    dual_dictionary = copy.deepcopy(primal_dictionary)
     dual_dictionary.C = -np.transpose(primal_dictionary.C)
     non_basic_size = primal_dictionary.N.size
     basic_size = primal_dictionary.B.size
     # dual_dictionary.B = np.zeros(primal_dictionary.N.size)
+    _type = type(primal_dictionary.N[0])
+    dual_B = np.empty(non_basic_size, dtype=_type)
+    dual_N = np.empty(basic_size, dtype=_type)
     # dual_dictionary.N = np.zeros(primal_dictionary.B.size)
     for index in range(non_basic_size):
-        if(primal_dictionary.N[index] < non_basic_size):
-            dual_dictionary.B[index] = primal_dictionary.N[index] + basic_size
-        else: dual_dictionary.B[index] =  primal_dictionary.N[index] - non_basic_size
+        if(primal_dictionary.N[index] <= non_basic_size):
+            dual_B[index] = primal_dictionary.N[index] + basic_size
+        else: dual_B[index] =  primal_dictionary.N[index] - non_basic_size
 
     for index in range(basic_size):
         if(primal_dictionary.B[index] <= non_basic_size):
-            dual_dictionary.N[index] = primal_dictionary.B[index] + basic_size
-        else: dual_dictionary.N[index] =  primal_dictionary.B[index] - non_basic_size
+            dual_N[index] = primal_dictionary.B[index] + basic_size
+        else: dual_N[index] =  primal_dictionary.B[index] - non_basic_size
+    dual_dictionary.B = dual_B
+    dual_dictionary.N = dual_N
     return dual_dictionary
     
 
@@ -405,11 +413,11 @@ def phase1_alg(D):
     #
 
 
-def run_examples():
-    arr1 = np.load("./results/iterations_results_fraction.npy",  allow_pickle = True)
-    arr2 = np.load("./results/iterations_results_float.npy",  allow_pickle = True)
-    #print_experiment(arr1,arr2)
 
+def run_examples():
+    #arr1 = np.load("./results/iterations_results_fraction.npy",  allow_pickle = True)
+    #arr2 = np.load("./results/iterations_results_float.npy",  allow_pickle = True)
+    #print_experiment(arr1,arr2)
     c,A,b = exercise2_7()
     d = Dictionary(c,A,b)
     phase1_alg(d)
