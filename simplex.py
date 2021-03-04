@@ -8,6 +8,7 @@ import copy
 
 def example1(): return np.array([5,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
 def example2(): return np.array([-2,-1]),np.array([[-1,1],[-1,-2],[0,1]]),np.array([-1,-2,1])
+def book_dual_example(): return np.array([-1,-4]), np.array([[2,1],[2,-4],[1,-3]]), np.array([4,-8,-7])
 def integer_pivoting_example(): return np.array([5,2]),np.array([[3,1],[2,5]]),np.array([7,5])
 def exercise2_5(): return np.array([1,3]),np.array([[-1,-1],[-1,1],[1,2]]),np.array([-3,-1,4])
 def exercise2_6(): return np.array([1,3]),np.array([[-1,-1],[-1,1],[1,2]]),np.array([-3,-1,2])
@@ -392,19 +393,18 @@ def get_dual_dictionary(primal_dictionary):
 
 
 def phase1_alg(D):
-    # for ele in D.C[0, 1:]: #[0,-1,-1,...]
-    #     ele = -ele/ele
-    #     print(ele)
-    # D.C[0,0] = 0
     D.C[0, 1:] = -(np.ones(D.C[0, 1:].size))
+    D.C[0,0] = 0
     dual_D = get_dual_dictionary(D)
     print(dual_D)
 
     k,l = bland(dual_D, 1e-5)
-    print(k)
-    print(l)
-    D.pivot(l,k)
-    print(D)
+    while (k != None and l != None):
+        dual_D.pivot(k,l)
+        k, l = bland(dual_D, 1e-5)
+    D = get_dual_dictionary(dual_D)
+   
+    
 
     # do dual equivalent pivotting in primal
     # find dual - call bland(dual-D) call pivot (k,l) with primal
@@ -418,8 +418,9 @@ def run_examples():
     #arr1 = np.load("./results/iterations_results_fraction.npy",  allow_pickle = True)
     #arr2 = np.load("./results/iterations_results_float.npy",  allow_pickle = True)
     #print_experiment(arr1,arr2)
-    c,A,b = exercise2_7()
+    c,A,b = book_dual_example()
     d = Dictionary(c,A,b)
+    print(d)
     phase1_alg(d)
 
 
@@ -470,14 +471,14 @@ def run_examples():
     # print()
 
     # Solve Example 1 using lp_solve
-    c,A,b = exercise2_7()
-    d = Dictionary(c,A,b)
-    print('lp_solve Example 1:')
-    res,D=lp_solve(c,A,b)
-    get_dual_dictionary(d)
-    print(res)
-    print(D)
-    print()
+    # c,A,b = exercise2_7()
+    # d = Dictionary(c,A,b)
+    # print('lp_solve Example 1:')
+    # res,D=lp_solve(c,A,b)
+    # get_dual_dictionary(d)
+    # print(res)
+    # print(D)
+    # print()
 
     # # Solve Example 2 using lp_solve
     # c,A,b = example2()
