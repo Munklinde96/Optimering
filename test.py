@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from fractions import Fraction
 
-from simplex import lp_solve, Dictionary, bland, LPResult
+from simplex import get_dual_dictionary, lp_solve, Dictionary, bland, LPResult, exercise2_5, phase1_alg
 
 class TestExample1(unittest.TestCase):
     def setUp(self):
@@ -24,6 +24,16 @@ class TestExample1(unittest.TestCase):
         self.assertAlmostEqual(D.value(), 13.0)
         for (a,b) in zip(list(D.basic_solution()), [2.0, 0.0, 1.0]) :
             self.assertAlmostEqual(a,b)
+            
+    def test_infeasable_primal_unbounded_dual(self):
+        print("infeasible test of ex. 2.5")
+        c,A,b = exercise2_5() # unbounded
+        d = Dictionary(c,A,b)
+        dual = get_dual_dictionary(d)  #dual of undbounded is infeasable
+        res, D = phase1_alg(dual, bland(dual, 1e-5))
+        assert(res == LPResult.UNBOUNDED)
+        assert(D == None)
+
 
 if __name__ == '__main__':
     unittest.main()

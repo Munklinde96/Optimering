@@ -168,17 +168,60 @@ class Dictionary:
         self.C[l+1,:] = self.C[l+1,:]/(-a)  #normalize by B[L] coefficient
         pass
 
-
 class LPResult(Enum):
     OPTIMAL = 1
     INFEASIBLE = 2
     UNBOUNDED = 3
 
-#D.B = array of indices of basic variables
-#D.N = array of indices of non-basic variables
-#A = coefficients of variables in constraints
-#c = coefficients of objective function
-#b = values of basic variables
+def run_experiment_1phase_alg(no_of_iterations):
+
+    iterations_results_float = []
+    iterations_results_fraction = []
+    
+    for i in range(no_of_iterations):
+        #The formulas for m and n produce numbers between 10 and 100.
+        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        print("started running")
+        c,A,b = random_lp(n,m)
+        print("m is: "+ str(m))
+        print("n is: "+ str(n))
+
+        t0 = time.time()
+        res = linprog(c,A,b)
+        t1 = time.time()
+        total_time_scipy = t1-t0
+        print("finished SciPy in time:" + str(total_time_scipy))
+        
+        t0 = time.time()
+        res_float, D = lp_solve(c,A,b, dtype = np.float64)
+        t1 = time.time()
+        total_time_float = t1-t0
+        print("finished float64 in time:" + str(total_time_float))
+        t2 = time.time()
+        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
+        t3 = time.time()   
+        total_time_fraction = t3-t2
+        print("finished Fraction in time:" + str(total_time_fraction))
+        iterations_results_float.append((n,m,total_time_float, res_float))
+        iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
+    
+    np.save("./results/iterations_results_float.npy",iterations_results_float, allow_pickle = True)
+    np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
+
+    
+def print_experiment(array1, array2):
+    fig=plt.figure()
+    arr_n_plus_m = [_tuple[0]+_tuple[1] for _tuple in array1]
+    arr1_time = [_tuple[2] for _tuple in array1]
+    arr2_time = [_tuple[2] for _tuple in array2]
+    plt.scatter(arr_n_plus_m, arr1_time, color='r', marker = "x", label ="fraction")
+    plt.scatter(arr_n_plus_m, arr2_time, color='b', marker = "o", label ="float")
+    plt.xlabel('n+m')
+    plt.ylabel('Time')
+    plt.title('Time experiment for n+m')
+    plt.legend()
+    plt.show()
 
 def bland(D,eps):
     # Assumes a feasible dictionary D and finds entering and leaving
@@ -217,7 +260,7 @@ def bland(D,eps):
         coefficient_entering = constraint_coeff_entering[index]
         constraint_constant = constraint_constants[index]
         constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
-        if ( constraint_ratio > tightest_ratio and constraint_ratio < 0):
+        if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
             tightest_ratio = constraint_ratio
             leaving_candidates = []
             leaving_candidates.append(D.B[index])
@@ -277,30 +320,7 @@ def largest_increase(D,eps):
     # TODO
     return k,l
 
-def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbose=False):
-    # Simplex algorithm
-    # 
-    # Input is LP in standard form given by vectors and matrices
-    # c,A,b.
-    #
-    # eps>=0 is such that numbers in the closed interval [-eps,eps]
-    # are to be treated as if they were 0.
-    #
-    # pivotrule is a rule used for pivoting. Cycling is prevented by
-    # switching to Bland's rule as needed.
-    #
-    # If verbose is True it outputs possible useful information about
-    # the execution, e.g. the sequence of pivot operations
-    # performed. Nothing is required.
-    #
-    # If LP is infeasible the return value is LPResult.INFEASIBLE,None
-    #
-    # If LP is unbounded the return value is LPResult.UNBOUNDED,None
-    #
-    # If LP has an optimal solution the return value is
-    # LPResult.OPTIMAL,D, where D is an optimal dictionary.
-    
-    D = Dictionary(c, A, b)
+def find_and_perform_pivots(D, pivotrule=lambda D: bland(D,eps=0)):
     k,l = pivotrule(D)
     res = None, None
     while (k != None and l != None):
@@ -311,59 +331,6 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     if(k == None):
         res = LPResult.OPTIMAL, D
     return res
-
-
-def run_experiment_1phase_alg(no_of_iterations):
-
-    iterations_results_float = []
-    iterations_results_fraction = []
-    
-    for i in range(no_of_iterations):
-        #The formulas for m and n produce numbers between 10 and 100.
-        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
-        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
-        print("started running")
-        c,A,b = random_lp(n,m)
-        print("m is: "+ str(m))
-        print("n is: "+ str(n))
-
-        t0 = time.time()
-        res = linprog(c,A,b)
-        t1 = time.time()
-        total_time_scipy = t1-t0
-        print("finished SciPy in time:" + str(total_time_scipy))
-        
-        t0 = time.time()
-        res_float, D = lp_solve(c,A,b, dtype = np.float64)
-        t1 = time.time()
-        total_time_float = t1-t0
-        print("finished float64 in time:" + str(total_time_float))
-        t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
-        t3 = time.time()   
-        total_time_fraction = t3-t2
-        print("finished Fraction in time:" + str(total_time_fraction))
-        iterations_results_float.append((n,m,total_time_float, res_float))
-        iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
-    
-    np.save("./results/iterations_results_float.npy",iterations_results_float, allow_pickle = True)
-    np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
-
-    
-def print_experiment(array1, array2):
-    fig=plt.figure()
-    arr_n_plus_m = [_tuple[0]+_tuple[1] for _tuple in array1]
-    arr1_time = [_tuple[2] for _tuple in array1]
-    arr2_time = [_tuple[2] for _tuple in array2]
-    plt.scatter(arr_n_plus_m, arr1_time, color='r', marker = "x", label ="fraction")
-    plt.scatter(arr_n_plus_m, arr2_time, color='b', marker = "o", label ="float")
-    plt.xlabel('n+m')
-    plt.ylabel('Time')
-    plt.title('Time experiment for n+m')
-    plt.legend()
-    plt.show()
-
-
 
 def get_dual_dictionary(primal_dictionary):
     dual_dictionary = copy.deepcopy(primal_dictionary)
@@ -388,32 +355,8 @@ def get_dual_dictionary(primal_dictionary):
     dual_dictionary.N = dual_N
     return dual_dictionary
     
-
-
-def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
-    #insert new obj func and remeber old one
-    original_obj_func = copy.deepcopy(D.C[0,1:])
-    original_non_basic = copy.deepcopy(D.N)
-    D.C[0, 1:] = -(np.ones(D.C[0, 1:].size))
-    D.C[0,0] = 0
-
-    #det dual og modified dictionary
-    dual_D = get_dual_dictionary(D)
-
-    #TODO: modify to use generic rule
-    #use rule to find pivot indicies
-    k,l = pivotrule(dual_D)
-    while (k != None and l != None):
-        dual_D.pivot(k,l)
-        print(dual_D)
-        k, l = pivotrule(dual_D)
-    if(k != None and l == None):
-        return LPResult.INFEASIBLE, None
-
-    #get dual of dual = primal
-    D = get_dual_dictionary(dual_D)
-
-    # substitute the answer from feasable dictionary into obj function from original primal problem 
+def insert_new_obj_func(D, original_obj_func, original_non_basic):
+        # substitute the answer from feasable dictionary into obj function from original primal problem 
     new_obj_func = np.array([])
     variables_substituted = []
     #check for each basic var in feasable dual if it is in original obj func
@@ -426,18 +369,71 @@ def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
             else: new_obj_func = original_obj_func[index_in_N]*D.C[index +1,:]
             variables_substituted.append(index_in_N+1)
 
-    print(new_obj_func)
+    # print(new_obj_func)
     #iterate over all original nonbasic - If not substituted, add coeff to coeff in new obj func
     for index in range(original_non_basic.size):
         if not (original_non_basic[index] in variables_substituted): #
             index_new_obj = D.N.tolist().index(original_non_basic[index])+1
             new_obj_func[index_new_obj] = new_obj_func[index_new_obj] + original_obj_func[index]
-    
-    # assign new obj function after substituting
+
     D.C[0,:] = new_obj_func
-    return None, D
+    return D
+    
 
+def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
+    #insert new obj func and remeber old one
+    original_obj_func = copy.deepcopy(D.C[0,1:])
+    original_non_basic = copy.deepcopy(D.N)
+    D.C[0, 1:] = -(np.ones(D.C[0, 1:].size))
+    D.C[0,0] = 0
 
+    #det dual of modified dictionary
+    dual_D = get_dual_dictionary(D)
+
+    res, optimal_dual = find_and_perform_pivots(dual_D, pivotrule)
+    #If dual is unbounded, then primal is infeasible
+    if(res == LPResult.UNBOUNDED):
+        return res, None
+
+    #get dual of dual = primal, and insert new obj_func
+    D = get_dual_dictionary(optimal_dual)
+    D = insert_new_obj_func(D, original_obj_func, original_non_basic)
+    return res, D
+
+def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbose=False):
+    # Simplex algorithm
+    # 
+    # Input is LP in standard form given by vectors and matrices
+    # c,A,b.
+    #
+    # eps>=0 is such that numbers in the closed interval [-eps,eps]
+    # are to be treated as if they were 0.
+    #
+    # pivotrule is a rule used for pivoting. Cycling is prevented by
+    # switching to Bland's rule as needed.
+    #
+    # If verbose is True it outputs possible useful information about
+    # the execution, e.g. the sequence of pivot operations
+    # performed. Nothing is required.
+    #
+    # If LP is infeasible the return value is LPResult.INFEASIBLE,None
+    #
+    # If LP is unbounded the return value is LPResult.UNBOUNDED,None
+    #
+    # If LP has an optimal solution the return value is
+    # LPResult.OPTIMAL,D, where D is an optimal dictionary.
+    
+    D = Dictionary(c, A, b)
+    constraint_constants = D.C[1:, 0]
+    res = None
+    no_of_negative_constants1 = np.sum(n < 0 for n in constraint_constants)
+    is_infeasible = 0 < no_of_negative_constants1
+    if(is_infeasible):
+        res_phase1, D = phase1_alg(D, pivotrule)
+        if(res_phase1 is LPResult.UNBOUNDED):
+            return LPResult.INFEASIBLE, D
+    res = find_and_perform_pivots(D, pivotrule)
+    return res
 
 def run_examples():
     #arr1 = np.load("./results/iterations_results_fraction.npy",  allow_pickle = True)
@@ -447,12 +443,10 @@ def run_examples():
     # d = Dictionary(c,A,b)
     # phase1_alg(d)
 
-    c,A,b = book_dual_example()
-    d = Dictionary(c,A,b)
-    print("Primal:")
-    print(d)
-    phase1_alg(d)
-
+    #test_infeasable_primal_unbounded_dual()
+    test_2_6_phase()
+    test_2_5_phase()
+    test_2_7_phase()
     return
     #run_experiment_1phase_alg(100)
     #ratiotest
@@ -500,14 +494,13 @@ def run_examples():
     # print()
 
     # Solve Example 1 using lp_solve
-    c,A,b = exercise2_7()
-    d = Dictionary(c,A,b)
-    print('lp_solve Example 1:')
-    res,D=lp_solve(c,A,b)
-    get_dual_dictionary(d)
-    print(res)
-    print(D)
-    print()
+    # c,A,b = exercise2_7()
+    # d = Dictionary(c,A,b)
+    # print('lp_solve Example 1:')
+    # res,D=lp_solve(c,A,b)
+    # print(res)
+    # print(D)
+    # print()
 
     # # Solve Example 2 using lp_solve
     # c,A,b = example2()
@@ -567,6 +560,39 @@ def run_examples():
     # D.pivot(1,1)
     # print(D)
 
+def test_infeasable_primal_unbounded_dual():
+        print("infeasible test of ex. 2.5")
+        c,A,b = exercise2_5() # unbounded
+        d = Dictionary(c,A,b)
+        dual = get_dual_dictionary(d)  #dual of undbounded is infeasable
+        res, D = phase1_alg(dual)
+        assert(res == LPResult.UNBOUNDED)
+        assert(D == None)
+        print("test_infeasable_primal_unbounded_dual SUCCESFUL")
+
+
+
+def test_2_5_phase():
+        c,A,b = exercise2_5() # unbounded
+        res, D = lp_solve(c,A,b)
+        res_linprog = linprog(-c,A,b, method = "simplex")
+        assert(res_linprog.status == 0) 
+        assert(res == LPResult.OPTIMAL)
+
+def test_2_6_phase():
+        c,A,b = exercise2_6() # unbounded
+        res, D = lp_solve(c,A,b)
+        res_linprog = linprog(-c,A,b, method = "simplex")
+        print(res)
+        assert(res_linprog.status == 2) 
+        assert(res == LPResult.INFEASIBLE)
+
+def test_2_7_phase():
+        c,A,b = exercise2_7() # unbounded
+        res, D = lp_solve(c,A,b)
+        res_linprog = linprog(-c,A,b, method = "simplex")
+        assert(res_linprog.status == 3) 
+        assert(res == LPResult.UNBOUNDED)
 
 run_examples();
 
