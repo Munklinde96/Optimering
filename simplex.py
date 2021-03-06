@@ -298,10 +298,30 @@ def largest_coefficient(D,eps):
     # Otherwise D.N[k] is entering variable
     # l is None if D is Unbounded
     # Otherwise D.B[l] is a leaving variable
+    largest = 0
+    entering = None
+    obj_func_coeffs = D.C[0, 1:]
+    for i in range(obj_func_coeffs.size):
+        coeff = obj_func_coeffs[i]
+        if(coeff > largest):
+            largest = coeff
+            entering = i
     
-    k=l=None
-    # TODO
-    return k,l
+    leaving=None
+    tightest_ratio = -np.inf 
+    constraint_coeff_entering = D.C[1:,entering+1]
+    constraint_constants = D.C[1:, 0]
+
+    #find leaving variable
+    for i in range(constraint_coeff_entering.size):
+        coefficient_entering = constraint_coeff_entering[i]
+        constraint_constant = constraint_constants[i]
+        constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
+        if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
+            tightest_ratio = constraint_ratio
+            leaving = i
+
+    return entering, leaving
 
 def largest_increase(D,eps):
     # Assumes a feasible dictionary D and find entering and leaving
@@ -444,9 +464,12 @@ def run_examples():
     # phase1_alg(d)
 
     #test_infeasable_primal_unbounded_dual()
+
+    test_largest_coeff_example1()
     test_2_6_phase()
     test_2_5_phase()
     test_2_7_phase()
+    test_book_example()
     return
     #run_experiment_1phase_alg(100)
     #ratiotest
@@ -559,8 +582,15 @@ def run_examples():
     # print('x2 is entering and x4 leaving:')
     # D.pivot(1,1)
     # print(D)
+def test_largest_coeff_example1():
+    print("Test of choosing largest entering and smallest ratio leaving")
+    c,A,b = example1()
+    d = Dictionary(c,A,b)
+    entering, leaving = largest_coefficient(d, 1e-5)
+    assert(entering == 0)
+    assert(leaving == 0)
 
-def test_infeasable_primal_unbounded_dual():
+def test_infeasible_primal_unbounded_dual():
         print("infeasible test of ex. 2.5")
         c,A,b = exercise2_5() # unbounded
         d = Dictionary(c,A,b)
@@ -570,19 +600,17 @@ def test_infeasable_primal_unbounded_dual():
         assert(D == None)
         print("test_infeasable_primal_unbounded_dual SUCCESFUL")
 
-
-
 def test_2_5_phase():
         c,A,b = exercise2_5() # unbounded
         res, D = lp_solve(c,A,b)
-        res_linprog = linprog(-c,A,b, method = "simplex")
+        res_linprog = linprog(-c,A,b)
         assert(res_linprog.status == 0) 
         assert(res == LPResult.OPTIMAL)
 
 def test_2_6_phase():
         c,A,b = exercise2_6() # unbounded
         res, D = lp_solve(c,A,b)
-        res_linprog = linprog(-c,A,b, method = "simplex")
+        res_linprog = linprog(-c,A,b)
         print(res)
         assert(res_linprog.status == 2) 
         assert(res == LPResult.INFEASIBLE)
@@ -590,7 +618,14 @@ def test_2_6_phase():
 def test_2_7_phase():
         c,A,b = exercise2_7() # unbounded
         res, D = lp_solve(c,A,b)
-        res_linprog = linprog(-c,A,b, method = "simplex")
+        res_linprog = linprog(-c,A,b)
+        assert(res_linprog.status == 3) 
+        assert(res == LPResult.UNBOUNDED)
+
+def test_book_example():
+        c,A,b = book_dual_example() # unbounded
+        res, D = lp_solve(c,A,b)
+        res_linprog = linprog(-c,A,b)
         assert(res_linprog.status == 3) 
         assert(res == LPResult.UNBOUNDED)
 
