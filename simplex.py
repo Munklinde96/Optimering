@@ -7,6 +7,7 @@ from scipy.optimize import linprog
 import copy
 
 def example1(): return np.array([5,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
+def example1_1(): return np.array([4,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
 def example2(): return np.array([-2,-1]),np.array([[-1,1],[-1,-2],[0,1]]),np.array([-1,-2,1])
 def integer_pivoting_example(): return np.array([5,2]),np.array([[3,1],[2,5]]),np.array([7,5])
 def book_dual_example(): return np.array([-1,4]), np.array([[-2,-1],[-2,4],[-1,3]]), np.array([4,-8,-7])
@@ -335,10 +336,29 @@ def largest_increase(D,eps):
     # Otherwise D.N[k] is entering variable
     # l is None if D is Unbounded
     # Otherwise D.B[l] is a leaving variable
-    
-    k=l=None
-    # TODO
-    return k,l
+
+    #Find most restricting ratio for all leaving and multiply with coeffient in obj func
+    obj_func_coeffs = D.C[0, 1:]
+    entering_candidates = []
+    leaving_candidates = np.zeros(obj_func_coeffs.size)
+    for entering_candidate in range(obj_func_coeffs.size):
+        coeff = obj_func_coeffs[entering_candidate]
+        tightest_ratio = -np.inf 
+        constraint_coeff_entering = D.C[1:,entering_candidate+1]
+        constraint_constants = D.C[1:, 0]
+        #find most restricting ratio
+        for i in range(constraint_coeff_entering.size):
+            coefficient_entering = constraint_coeff_entering[i]
+            constraint_constant = constraint_constants[i]
+            constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
+            if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
+                tightest_ratio = constraint_ratio
+                leaving_candidates[entering_candidate] = i
+        entering_candidates.append(abs(tightest_ratio) * coeff)
+    #find max in entering_candidates
+    entering = int(np.argmax(entering_candidates))
+    leaving = int(leaving_candidates[entering])
+    return entering, leaving
 
 def find_and_perform_pivots(D, pivotrule=lambda D: bland(D,eps=0)):
     k,l = pivotrule(D)
@@ -466,6 +486,7 @@ def run_examples():
     #test_infeasable_primal_unbounded_dual()
 
     test_largest_coeff_example1()
+    test_largest_increase_example1()
     test_2_6_phase()
     test_2_5_phase()
     test_2_7_phase()
@@ -589,6 +610,14 @@ def test_largest_coeff_example1():
     entering, leaving = largest_coefficient(d, 1e-5)
     assert(entering == 0)
     assert(leaving == 0)
+
+def test_largest_increase_example1():
+    print("Test of choosing entering that increases z the most")
+    c,A,b = example1_1()
+    d = Dictionary(c,A,b)
+    entering, leaving = largest_increase(d, 1e-5)
+    assert(entering == 2)
+    assert(leaving == 2)
 
 def test_infeasible_primal_unbounded_dual():
         print("infeasible test of ex. 2.5")
