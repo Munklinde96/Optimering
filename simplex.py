@@ -159,15 +159,29 @@ class Dictionary:
         entering = self.N[k]
         self.N[k] = leaving
         self.B[l] = entering 
-        t0 = time.time()
+
+        if(self.dtype == int):
+            for row_index in range(self.C[:,0].size): # multiply each row by entering coeff
+                if(row_index != l+1):
+                    self.C[row_index, :] = -a * self.C[row_index, :] 
+    
         for row_index in range(self.C[:,0].size):  #subtract/add leaving var to all other rows
             if(row_index != l+1):
                 leaving_value = self.C[row_index, k+1]
                 leaving_ratio = ratio(leaving_value, a)
                 self.C[row_index, :] = self.C[row_index, :] - leaving_ratio * self.C[l+1, :]
                 self.C[row_index, k+1] = leaving_ratio
-        self.C[l+1,k+1] = -self.C[l+1,k+1]/self.C[l+1,k+1]  #swap leaving and entering
-        self.C[l+1,:] = self.C[l+1,:]/(-a)  #normalize by B[L] coefficient
+        
+        if(self.dtype != int):
+            self.C[l+1,k+1] = -self.C[l+1,k+1]/self.C[l+1,k+1]  #swap leaving and entering
+            self.C[l+1,:] = self.C[l+1,:]/(-a)  #normalize by B[L] coefficient
+        else:
+            self.C[l+1,k+1] = -self.lastpivot  
+            for row_index in range(self.C[:,0].size):  #divide all rows, except the pivot row, by the previous negatuve pivot coefficient
+                if(row_index != l+1):
+                    self.C[row_index,k+1] = self.lastpivot * self.C[row_index,k+1] 
+                    self.C[row_index, :] = self.C[row_index, :] // self.lastpivot   #  // is integer division
+            self.lastpivot = -a
         pass
 
 class LPResult(Enum):
@@ -233,7 +247,10 @@ def bland(D,eps):
 def ratio(x, y, eps=1e-5):
     if( y == 0):
         return 0
-    temp = x/y
+    if(type(x)==int):
+        temp = x//y
+    else: temp = x/y
+
     if np.abs(temp) < eps:
         temp = 0 #eps>=0 is such that numbers in the closed interval [-eps,eps]
     return temp
@@ -276,45 +293,6 @@ def largest_coefficient(D,eps):
 
     return entering, leaving
 
-# def largest_increase(D,eps):
-#     # Assumes a feasible dictionary D and find entering and leaving
-#     # variables according to the Largest Increase rule.
-#     #
-#     # eps>=0 is such that numbers in the closed interval [-eps,eps]
-#     # are to be treated as if they were 0
-#     #
-#     # Returns k and l such that
-#     # k is None if D is Optimal
-#     # Otherwise D.N[k] is entering variable
-#     # l is None if D is Unbounded
-#     # Otherwise D.B[l] is a leaving variable
-
-#     #Find most restricting ratio for all leaving and multiply with coeffient in obj func
-#     obj_func_coeffs = D.C[0, 1:]
-#     leaving = None
-#     entering = None
-#     entering_increase = -np.inf
-#     for entering_candidate in range(obj_func_coeffs.size):
-#         coeff = obj_func_coeffs[entering_candidate]
-#         if( coeff > 0 ):
-#             if (entering == None):
-#                 entering = entering_candidate
-#             tightest_ratio = -np.inf 
-#             constraint_coeff_entering = D.C[1:,entering_candidate+1]
-#             constraint_constants = D.C[1:, 0]
-#             #find most restricting ratio
-#             for i in range(constraint_coeff_entering.size):
-#                 coefficient_entering = constraint_coeff_entering[i]
-#                 constraint_constant = constraint_constants[i]
-#                 constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
-#                 if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
-#                     tightest_ratio = constraint_ratio
-#                     if(abs(tightest_ratio) * coeff > entering_increase):
-#                         entering_increase = abs(tightest_ratio) * coeff
-#                         entering = entering_candidate
-#                         leaving = i
-
-#     return entering, leaving
 
 def largest_increase(D,eps):
     # Assumes a feasible dictionary D and find entering and leaving
@@ -450,6 +428,8 @@ def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
     D = insert_new_obj_func(D, original_obj_func, original_non_basic)
     return res, D
 
+
+
 def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbose=False):
     # Simplex algorithm
     # 
@@ -473,7 +453,7 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     # If LP has an optimal solution the return value is
     # LPResult.OPTIMAL,D, where D is an optimal dictionary.
     
-    D = Dictionary(c, A, b)
+    D = Dictionary(c, A, b, dtype = dtype)
     constraint_constants = D.C[1:, 0]
     res = None
     no_of_negative_constants1 = np.sum(n < 0 for n in constraint_constants)
@@ -486,8 +466,10 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     return res
 
 def run_examples():
-    print_experiment()
-    #test_correctness_of_algorithms(10)
+    # test_integer_pivot()
+    # test_integer_pivot1()
+    #print_experiment()
+    test_correctness_of_algorithms(10)
     #run_experiment_2(500)
     # test_largest_coeff_example1()
     # test_largest_increase_example1()
@@ -497,7 +479,26 @@ def run_examples():
     # test_book_example()
     #run_experiment_1phase_alg(100)
     return
-
+def test_integer_pivot1():
+    c,A,b = integer_pivoting_example()
+    d = Dictionary(c,A,b, dtype= int)
+    entering, leaving = largest_coefficient(d, 1e-5)
+    print(d)
+    d.pivot(entering, leaving)
+    entering, leaving = largest_coefficient(d, 1e-5)
+    print(d)
+    d.pivot(entering, leaving)
+    print(d)
+    
+def test_integer_pivot():
+    c,A,b = exercise2_5()
+    res_int, D_int = lp_solve(c,A,b, dtype=int)
+    print(res_int)
+    print(D_int)
+    res_float, D_float = lp_solve(c,A,b)
+    print(res_float)
+    print(D_float)
+    
 def test_largest_coeff_example1():
     print("Test of choosing largest entering and smallest ratio leaving")
     c,A,b = example1()
@@ -553,19 +554,20 @@ def test_book_example():
 
 def test_correctness_of_algorithms(number_of_iterations):
     for i in range(number_of_iterations):
-        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
-        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        n = int(np.round(np.exp(np.log(20)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(20)*np.random.rand())+10))
         c,A,b = random_lp(n,m)
         res_bland, D_bland = lp_solve(c,A,b)
         res_largest_coeff, D_largest_coeff = lp_solve(c,A,b, pivotrule= lambda D: largest_coefficient(D, eps = 1e-5))
         res_largest_increase, D_largest_increase = lp_solve(c,A,b, pivotrule= lambda D: largest_increase(D, eps = 1e-5))
+        res_bland_int, D_bland_int = lp_solve(c,A,b,dtype=int)
         try:
             res_linprog = linprog(-c,A,b)
         except:
             res_linprog.status = 2
-        assert(res_bland == res_largest_coeff == res_largest_increase)
+        assert(res_bland == res_largest_coeff == res_largest_increase==res_bland_int)
         if(res_bland == LPResult.OPTIMAL):
-            assert(D_bland.value() == D_largest_coeff.value() == D_largest_increase.value())
+            assert(D_bland.value() == D_largest_coeff.value() == D_largest_increase.value() == D_bland_int.value())
         if(res_bland == LPResult.OPTIMAL):
             assert(res_linprog.status == 0)
         if(res_bland == LPResult.UNBOUNDED):
