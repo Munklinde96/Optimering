@@ -5,6 +5,7 @@ import time
 import matplotlib.pyplot as plt
 from scipy.optimize import linprog
 import copy
+import math
 
 def example1(): return np.array([5,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
 def example1_1(): return np.array([4,4,3]),np.array([[2,3,1],[4,1,2],[3,4,2]]),np.array([5,11,8])
@@ -174,56 +175,6 @@ class LPResult(Enum):
     INFEASIBLE = 2
     UNBOUNDED = 3
 
-def run_experiment_1phase_alg(no_of_iterations):
-
-    iterations_results_float = []
-    iterations_results_fraction = []
-    
-    for i in range(no_of_iterations):
-        #The formulas for m and n produce numbers between 10 and 100.
-        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
-        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
-        print("started running")
-        c,A,b = random_lp(n,m)
-        print("m is: "+ str(m))
-        print("n is: "+ str(n))
-
-        t0 = time.time()
-        res = linprog(c,A,b)
-        t1 = time.time()
-        total_time_scipy = t1-t0
-        print("finished SciPy in time:" + str(total_time_scipy))
-        
-        t0 = time.time()
-        res_float, D = lp_solve(c,A,b, dtype = np.float64)
-        t1 = time.time()
-        total_time_float = t1-t0
-        print("finished float64 in time:" + str(total_time_float))
-        t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
-        t3 = time.time()   
-        total_time_fraction = t3-t2
-        print("finished Fraction in time:" + str(total_time_fraction))
-        iterations_results_float.append((n,m,total_time_float, res_float))
-        iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
-    
-    np.save("./results/iterations_results_float.npy",iterations_results_float, allow_pickle = True)
-    np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
-
-    
-def print_experiment(array1, array2):
-    fig=plt.figure()
-    arr_n_plus_m = [_tuple[0]+_tuple[1] for _tuple in array1]
-    arr1_time = [_tuple[2] for _tuple in array1]
-    arr2_time = [_tuple[2] for _tuple in array2]
-    plt.scatter(arr_n_plus_m, arr1_time, color='r', marker = "x", label ="fraction")
-    plt.scatter(arr_n_plus_m, arr2_time, color='b', marker = "o", label ="float")
-    plt.xlabel('n+m')
-    plt.ylabel('Time')
-    plt.title('Time experiment for n+m')
-    plt.legend()
-    plt.show()
-
 def bland(D,eps):
     # Assumes a feasible dictionary D and finds entering and leaving
     # variables according to Bland's rule.
@@ -307,7 +258,8 @@ def largest_coefficient(D,eps):
         if(coeff > largest):
             largest = coeff
             entering = i
-    
+    if(entering is None):
+        return None, None
     leaving=None
     tightest_ratio = -np.inf 
     constraint_coeff_entering = D.C[1:,entering+1]
@@ -324,6 +276,46 @@ def largest_coefficient(D,eps):
 
     return entering, leaving
 
+# def largest_increase(D,eps):
+#     # Assumes a feasible dictionary D and find entering and leaving
+#     # variables according to the Largest Increase rule.
+#     #
+#     # eps>=0 is such that numbers in the closed interval [-eps,eps]
+#     # are to be treated as if they were 0
+#     #
+#     # Returns k and l such that
+#     # k is None if D is Optimal
+#     # Otherwise D.N[k] is entering variable
+#     # l is None if D is Unbounded
+#     # Otherwise D.B[l] is a leaving variable
+
+#     #Find most restricting ratio for all leaving and multiply with coeffient in obj func
+#     obj_func_coeffs = D.C[0, 1:]
+#     leaving = None
+#     entering = None
+#     entering_increase = -np.inf
+#     for entering_candidate in range(obj_func_coeffs.size):
+#         coeff = obj_func_coeffs[entering_candidate]
+#         if( coeff > 0 ):
+#             if (entering == None):
+#                 entering = entering_candidate
+#             tightest_ratio = -np.inf 
+#             constraint_coeff_entering = D.C[1:,entering_candidate+1]
+#             constraint_constants = D.C[1:, 0]
+#             #find most restricting ratio
+#             for i in range(constraint_coeff_entering.size):
+#                 coefficient_entering = constraint_coeff_entering[i]
+#                 constraint_constant = constraint_constants[i]
+#                 constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
+#                 if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
+#                     tightest_ratio = constraint_ratio
+#                     if(abs(tightest_ratio) * coeff > entering_increase):
+#                         entering_increase = abs(tightest_ratio) * coeff
+#                         entering = entering_candidate
+#                         leaving = i
+
+#     return entering, leaving
+
 def largest_increase(D,eps):
     # Assumes a feasible dictionary D and find entering and leaving
     # variables according to the Largest Increase rule.
@@ -339,33 +331,51 @@ def largest_increase(D,eps):
 
     #Find most restricting ratio for all leaving and multiply with coeffient in obj func
     obj_func_coeffs = D.C[0, 1:]
-    entering_candidates = []
-    leaving_candidates = np.zeros(obj_func_coeffs.size)
-    for entering_candidate in range(obj_func_coeffs.size):
-        coeff = obj_func_coeffs[entering_candidate]
-        tightest_ratio = -np.inf 
-        constraint_coeff_entering = D.C[1:,entering_candidate+1]
-        constraint_constants = D.C[1:, 0]
-        #find most restricting ratio
-        for i in range(constraint_coeff_entering.size):
-            coefficient_entering = constraint_coeff_entering[i]
-            constraint_constant = constraint_constants[i]
-            constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
-            if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
-                tightest_ratio = constraint_ratio
-                leaving_candidates[entering_candidate] = i
-        entering_candidates.append(abs(tightest_ratio) * coeff)
-    #find max in entering_candidates
-    entering = int(np.argmax(entering_candidates))
-    leaving = int(leaving_candidates[entering])
+    leaving = None
+    entering = None
+    entering_increase = -np.inf
+    for N_i in range(obj_func_coeffs.size):
+        obj_entering_coeff = obj_func_coeffs[N_i] 
+        tightest_ratio = -np.inf
+        leaving_index = None
+        if(obj_entering_coeff > 0):
+            if(entering == None):
+                entering = N_i  
+            for B_i in range(D.C[1:, N_i+1].size):
+                constraint_constant = D.C[B_i+1,0]
+                coefficient_entering = D.C[B_i+1,N_i+1]
+                constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
+                if (constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
+                    tightest_ratio = constraint_ratio
+                    leaving_index = B_i
+        if(abs(tightest_ratio)*obj_entering_coeff > entering_increase):
+            entering_increase = abs(tightest_ratio)*obj_entering_coeff
+            entering = N_i
+            leaving = leaving_index
     return entering, leaving
 
+def check_if_degenerate(D):
+    coefficient_col = D.C[1:,0]
+    contains_0 = 0 in coefficient_col
+    return contains_0
+
 def find_and_perform_pivots(D, pivotrule=lambda D: bland(D,eps=0)):
+    is_degenerate = check_if_degenerate(D)
+    degenerate_count = 0
+    if(is_degenerate):
+        degenerate_count += 1   
     k,l = pivotrule(D)
     res = None, None
     while (k != None and l != None):
         D.pivot(k,l)
-        k, l = pivotrule(D)
+        if(is_degenerate):
+            degenerate_count += 1
+        else:
+            degenerate_count = 0
+        if (degenerate_count >= (D.B.size)):
+            k, l = bland(D, eps=1e-5)
+        else:
+            k, l = pivotrule(D)
     if(k != None and l == None):
         res = LPResult.UNBOUNDED, None
     if(k == None):
@@ -459,7 +469,7 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     # If LP is infeasible the return value is LPResult.INFEASIBLE,None
     #
     # If LP is unbounded the return value is LPResult.UNBOUNDED,None
-    #
+
     # If LP has an optimal solution the return value is
     # LPResult.OPTIMAL,D, where D is an optimal dictionary.
     
@@ -476,133 +486,18 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     return res
 
 def run_examples():
-    #arr1 = np.load("./results/iterations_results_fraction.npy",  allow_pickle = True)
-    #arr2 = np.load("./results/iterations_results_float.npy",  allow_pickle = True)
-    #print_experiment(arr1,arr2)
-    # c,A,b = exercise2_7()
-    # d = Dictionary(c,A,b)
-    # phase1_alg(d)
-
-    #test_infeasable_primal_unbounded_dual()
-
-    test_largest_coeff_example1()
-    test_largest_increase_example1()
-    test_2_6_phase()
-    test_2_5_phase()
-    test_2_7_phase()
-    test_book_example()
-    return
+    print_experiment()
+    #test_correctness_of_algorithms(10)
+    #run_experiment_2(500)
+    # test_largest_coeff_example1()
+    # test_largest_increase_example1()
+    # test_2_6_phase()
+    # test_2_5_phase()
+    # test_2_7_phase()
+    # test_book_example()
     #run_experiment_1phase_alg(100)
-    #ratiotest
-    #Example 1
-    # c,A,b = example1()
-    # D=Dictionary(c,A,b)
-    # print('Example 1 with Fraction')
-    # print('Initial dictionary:')
-    # print(D)
-    # print('x1 is entering and x4 leaving:')
-    # D.pivot(0,0)
-    # print(D)
-    # print('x3 is entering and x6 leaving:')
-    # D.pivot(2,2)
-    # print(D)
-    # print()
+    return
 
-    # D=Dictionary(c,A,b,np.float64)
-    # print('Example 1 with np.float64')
-    # print('Initial dictionary:')
-    # print(D)
-    # print('x1 is entering and x4 leaving:')
-    # D.pivot(0,0)
-    # print(D)
-    # print('x3 is entering and x6 leaving:')
-    # D.pivot(2,2)
-    # print(D)
-    # print()
-
-    # # Example 2
-    # c,A,b = example2()
-    # print('Example 2')
-    # print('Auxillary dictionary')
-    # D=Dictionary(None,A,b)
-    # print(D)
-    # print('x0 is entering and x4 leaving:')
-    # D.pivot(2,1)
-    # print(D)
-    # print('x2 is entering and x3 leaving:')
-    # D.pivot(1,0)
-    # print(D)
-    # print('x1 is entering and x0 leaving:')
-    # D.pivot(0,1)
-    # print(D)
-    # print()
-
-    # Solve Example 1 using lp_solve
-    # c,A,b = exercise2_7()
-    # d = Dictionary(c,A,b)
-    # print('lp_solve Example 1:')
-    # res,D=lp_solve(c,A,b)
-    # print(res)
-    # print(D)
-    # print()
-
-    # # Solve Example 2 using lp_solve
-    # c,A,b = example2()
-    # print('lp_solve Example 2:')
-    # res,D=lp_solve(c,A,b)
-    # print(res)
-    # print(D)
-    # print()
-
-    # # Solve Exercise 2.5 using lp_solve
-    # c,A,b = exercise2_5()
-    # print('lp_solve Exercise 2.5:')
-    # res,D=lp_solve(c,A,b)
-    # print(res)
-    # print(D)
-    # print()
-
-    # # Solve Exercise 2.6 using lp_solve
-    # c,A,b = exercise2_6()
-    # print('lp_solve Exercise 2.6:')
-    # res,D=lp_solve(c,A,b)
-    # print(res)
-    # print(D)
-    # print()
-
-    # # Solve Exercise 2.7 using lp_solve
-    # c,A,b = exercise2_7()
-    # print('lp_solve Exercise 2.7:')
-    # res,D=lp_solve(c,A,b)
-    # print(res)
-    # print(D)
-    # print()
-
-    # #Integer pivoting
-    # c,A,b=example1()
-    # D=Dictionary(c,A,b,int)
-    # print('Example 1 with int')
-    # print('Initial dictionary:')
-    # print(D)
-    # print('x1 is entering and x4 leaving:')
-    # D.pivot(0,0)
-    # print(D)
-    # print('x3 is entering and x6 leaving:')
-    # D.pivot(2,2)
-    # print(D)
-    # print()
-
-    # c,A,b = integer_pivoting_example()
-    # D=Dictionary(c,A,b,int)
-    # print('Integer pivoting example from lecture')
-    # print('Initial dictionary:')
-    # print(D)
-    # print('x1 is entering and x3 leaving:')
-    # D.pivot(0,0)
-    # print(D)
-    # print('x2 is entering and x4 leaving:')
-    # D.pivot(1,1)
-    # print(D)
 def test_largest_coeff_example1():
     print("Test of choosing largest entering and smallest ratio leaving")
     c,A,b = example1()
@@ -613,12 +508,11 @@ def test_largest_coeff_example1():
 
 def test_largest_increase_example1():
     print("Test of choosing entering that increases z the most")
-    c,A,b = example1_1()
-    d = Dictionary(c,A,b)
-    entering, leaving = largest_increase(d, 1e-5)
-    assert(entering == 2)
-    assert(leaving == 2)
-
+    c,A,b = exercise2_5()
+    # assert(entering == 2)
+    # assert(leaving == 2)
+    res = lp_solve(c,A,b, dtype=np.float64, pivotrule=lambda D: largest_increase(D,eps=1e-5))
+    
 def test_infeasible_primal_unbounded_dual():
         print("infeasible test of ex. 2.5")
         c,A,b = exercise2_5() # unbounded
@@ -630,17 +524,16 @@ def test_infeasible_primal_unbounded_dual():
         print("test_infeasable_primal_unbounded_dual SUCCESFUL")
 
 def test_2_5_phase():
-        c,A,b = exercise2_5() # unbounded
+        c,A,b = exercise2_5() #optimal
         res, D = lp_solve(c,A,b)
         res_linprog = linprog(-c,A,b)
         assert(res_linprog.status == 0) 
         assert(res == LPResult.OPTIMAL)
 
 def test_2_6_phase():
-        c,A,b = exercise2_6() # unbounded
+        c,A,b = exercise2_6() # infeasible
         res, D = lp_solve(c,A,b)
         res_linprog = linprog(-c,A,b)
-        print(res)
         assert(res_linprog.status == 2) 
         assert(res == LPResult.INFEASIBLE)
 
@@ -657,6 +550,147 @@ def test_book_example():
         res_linprog = linprog(-c,A,b)
         assert(res_linprog.status == 3) 
         assert(res == LPResult.UNBOUNDED)
+
+def test_correctness_of_algorithms(number_of_iterations):
+    for i in range(number_of_iterations):
+        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        c,A,b = random_lp(n,m)
+        res_bland, D_bland = lp_solve(c,A,b)
+        res_largest_coeff, D_largest_coeff = lp_solve(c,A,b, pivotrule= lambda D: largest_coefficient(D, eps = 1e-5))
+        res_largest_increase, D_largest_increase = lp_solve(c,A,b, pivotrule= lambda D: largest_increase(D, eps = 1e-5))
+        try:
+            res_linprog = linprog(-c,A,b)
+        except:
+            res_linprog.status = 2
+        assert(res_bland == res_largest_coeff == res_largest_increase)
+        if(res_bland == LPResult.OPTIMAL):
+            assert(D_bland.value() == D_largest_coeff.value() == D_largest_increase.value())
+        if(res_bland == LPResult.OPTIMAL):
+            assert(res_linprog.status == 0)
+        if(res_bland == LPResult.UNBOUNDED):
+            assert(res_linprog.status == 3)
+        if(res_bland == LPResult.INFEASIBLE):
+            assert(res_linprog.status == 2)
+    print("it is amazing how this just works")
+
+def run_experiment_1phase_alg(no_of_iterations):
+
+    iterations_results_float = []
+    iterations_results_fraction = []
+    
+    for i in range(no_of_iterations):
+        #The formulas for m and n produce numbers between 10 and 100.
+        n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
+        print("started running")
+        c,A,b = random_lp(n,m)
+        print("m is: "+ str(m))
+        print("n is: "+ str(n))
+
+        t0 = time.time()
+        res = linprog(-c,A,b)
+        t1 = time.time()
+        total_time_scipy = t1-t0
+        print("finished SciPy in time:" + str(total_time_scipy))
+        
+        t0 = time.time()
+        res_float, D = lp_solve(c,A,b, dtype = np.float64)
+        t1 = time.time()
+        total_time_float = t1-t0
+        print("finished float64 in time:" + str(total_time_float))
+        t2 = time.time()
+        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
+        t3 = time.time()   
+        total_time_fraction = t3-t2
+        print("finished Fraction in time:" + str(total_time_fraction))
+        iterations_results_float.append((n,m,total_time_float, res_float))
+        iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
+    
+    np.save("./results/iterations_results_float.npy",iterations_results_float, allow_pickle = True)
+    np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
+
+def run_experiment_2(no_of_iterations):
+    iterations_results_largest_increase_float = []
+    iterations_results_largest_increase_fraction = []
+    iterations_results_largest_coeff_float = []
+    iterations_results_largest_coeff_fraction = []
+    iterations_results_scipy = []
+
+    
+    for i in range(no_of_iterations):
+        #The formulas for m and n produce numbers between 10 and 100.
+        n = int(np.round(np.exp(np.log(190)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(190)*np.random.rand())+10))
+        print("n: " + str(n) + " m: " + str(m))
+        c,A,b = random_lp(n,m)
+
+        t0 = time.time()
+        try:
+            res = linprog(-c,A,b)
+        except:
+            None
+        t1 = time.time()
+        total_time_scipy = t1-t0
+        iterations_results_scipy.append((n,m, total_time_scipy))
+        
+        t0 = time.time()
+        res_float, D = lp_solve(c,A,b, dtype = np.float64, pivotrule = lambda D: largest_coefficient(D, eps=1e-5))
+        t1 = time.time()
+        total_time_float = t1-t0
+        t2 = time.time()
+        res_fraction, D = lp_solve(c,A,b, dtype = Fraction, pivotrule = lambda D: largest_coefficient(D, eps =1e-5))
+        t3 = time.time()   
+        total_time_fraction = t3-t2
+        iterations_results_largest_coeff_float.append((n,m,total_time_float, res_float))
+        iterations_results_largest_coeff_fraction.append((n,m,total_time_fraction, res_fraction))
+
+        t0 = time.time()
+        res_float, D = lp_solve(c,A,b, dtype = np.float64, pivotrule = lambda D: largest_increase(D, eps = 1e-5))
+        t1 = time.time()
+        total_time_float = t1-t0
+        t2 = time.time()
+        res_fraction, D = lp_solve(c,A,b, dtype = Fraction, pivotrule = lambda D: largest_increase(D, eps=1e-5))
+        t3 = time.time()   
+        total_time_fraction = t3-t2
+        iterations_results_largest_increase_float.append((n,m,total_time_float, res_float))
+        iterations_results_largest_increase_fraction.append((n,m,total_time_fraction, res_fraction))
+    
+    np.save("./results/iterations_results_largest_coefficient_float.npy",iterations_results_largest_coeff_float, allow_pickle = True)
+    np.save("./results/iterations_results_largest_coefficient_fraction.npy",iterations_results_largest_coeff_fraction, allow_pickle = True)
+
+    np.save("./results/iterations_results_largest_increase_float.npy",iterations_results_largest_increase_float,  allow_pickle = True)
+    np.save("./results/iterations_results_largest_increase_fraction.npy",iterations_results_largest_increase_fraction,  allow_pickle = True)
+    
+    np.save("./results/iterations_results_scipy.npy",iterations_results_scipy,  allow_pickle = True)
+
+
+    
+def print_experiment():
+    largest_coeff_float = np.load("./results/iterations_results_largest_coefficient_float.npy", allow_pickle=True)
+    largest_coeff_fraction= np.load("./results/iterations_results_largest_coefficient_fraction.npy", allow_pickle = True)
+    largest_increase_float= np.load("./results/iterations_results_largest_increase_float.npy",allow_pickle = True)
+    largest_increase_fraction= np.load("./results/iterations_results_largest_increase_fraction.npy",allow_pickle = True)
+    scipy_res = np.load("./results/iterations_results_scipy.npy",allow_pickle = True)
+    fig=plt.figure()
+    arr_n_plus_m = [_tuple[0]+_tuple[1] for _tuple in largest_coeff_float]
+    largest_coeff_float_time = [_tuple[2] for _tuple in largest_coeff_float]
+    largest_coeff_fraction_time = [_tuple[2] for _tuple in largest_coeff_fraction]
+    largest_increase_float_time = [_tuple[2] for _tuple in largest_increase_float]
+    largest_increase_fraction_time = [_tuple[2] for _tuple in largest_increase_fraction]
+    scipy_time = [_tuple[2] for _tuple in scipy_res]
+    plt.scatter(arr_n_plus_m, largest_coeff_float_time, color='r', marker = "x", label ="largest_coeff_fraction")
+    plt.scatter(arr_n_plus_m, largest_coeff_fraction_time, color='r', marker = "o", label ="largest_coeff_float")
+    plt.scatter(arr_n_plus_m, largest_increase_float_time, color='b', marker = "x", label ="largest_increase_float")
+    plt.scatter(arr_n_plus_m, largest_increase_fraction_time, color='b', marker = "o", label ="largest_increase_fraction")
+    plt.scatter(arr_n_plus_m, scipy_time, color='g', marker = "o", label ="scipy")
+
+    plt.scatter
+    plt.xlabel('n+m')
+    plt.ylabel('Time')
+    plt.title('Time experiment for n+m')
+    plt.legend()
+    plt.show()
 
 run_examples();
 
