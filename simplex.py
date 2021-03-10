@@ -474,9 +474,12 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=1e-5),ve
 
 def run_examples():
     #test_integer_pivot1()
-    test_integer_pivot()
+    #floating_rounding_test()
+    run_experiment_2(200)
+    #run_experiment_inter_vs_fraction_pivot(200)
+    #test_integer_pivot()
     #print_experiment()
-    test_correctness_of_algorithms(30)
+    #test_correctness_of_algorithms(30)
     #run_experiment_2(500)
     # test_largest_coeff_example1()
     # test_largest_increase_example1()
@@ -487,25 +490,33 @@ def run_examples():
     #run_experiment_1phase_alg(100)
     return
 
+def floating_rounding_test():
+    res = ratio(0.000009,1)
+    assert(res == 0)
+    res = ratio(0.00001,1)
+    assert(res == 1.0e-5)
+
+
+
 def test_integer_pivot1():
     c,A,b = integer_pivoting_example()
     d = Dictionary(c,A,b, dtype= int)
     entering, leaving = largest_coefficient(d, 1e-5)
-    print(d)
+    #print(d)
     d.pivot(entering, leaving)
     entering, leaving = largest_coefficient(d, 1e-5)
-    print(d)
+    #print(d)
     d.pivot(entering, leaving)
-    print(d)
+    #print(d)
     
 def test_integer_pivot():
     c,A,b = integer_pivoting_example()
     res_int, D_int = lp_solve(c,A,b, dtype=int)
-    print(res_int)
-    print(D_int)
+    # print(res_int)
+    # print(D_int)
     res_float, D_float = lp_solve(c,A,b)
-    print(res_float)
-    print(D_float)
+    # print(res_float)
+    # print(D_float)
     
 def test_largest_coeff_example1():
     print("Test of choosing largest entering and smallest ratio leaving")
@@ -561,7 +572,6 @@ def test_book_example():
         assert(res == LPResult.UNBOUNDED)
 
 def test_correctness_of_algorithms(number_of_iterations):
-    counter = 0
     for i in range(number_of_iterations):
         n = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
         m = int(np.round(np.exp(np.log(50)*np.random.rand())+10))
@@ -590,17 +600,16 @@ def test_correctness_of_algorithms(number_of_iterations):
         if(res_bland == LPResult.UNBOUNDED):
             try: 
                 assert(res_linprog.status == 3)
-            except: print("!!!!!!" + str(res_linprog.status))
+            except: assert(res_linprog.status == 4)
         if(res_bland == LPResult.INFEASIBLE):
             assert(res_linprog.status == 2)
-        print(counter)
-        counter +=1
     print("it is amazing how this just works")
 
 def run_experiment_1phase_alg(no_of_iterations):
 
     iterations_results_float = []
     iterations_results_fraction = []
+    iterations_results_scipy = []
     
     for i in range(no_of_iterations):
         #The formulas for m and n produce numbers between 10 and 100.
@@ -623,15 +632,17 @@ def run_experiment_1phase_alg(no_of_iterations):
         total_time_float = t1-t0
         print("finished float64 in time:" + str(total_time_float))
         t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
+        #res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
         t3 = time.time()   
         total_time_fraction = t3-t2
         print("finished Fraction in time:" + str(total_time_fraction))
         iterations_results_float.append((n,m,total_time_float, res_float))
-        iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
+        #iterations_results_fraction.append((n,m,total_time_fraction, res_fraction))
+        iterations_results_scipy.append((n,m,total_time_scipy, res))
     
     np.save("./results/iterations_results_float.npy",iterations_results_float, allow_pickle = True)
-    np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
+    #np.save("./results/iterations_results_fraction.npy",iterations_results_fraction,  allow_pickle = True)
+    np.save("./results/iterations_results_scipy.npy",total_time_scipy,  allow_pickle = True)
 
 def run_experiment_2(no_of_iterations):
     iterations_results_largest_increase_float = []
@@ -640,11 +651,12 @@ def run_experiment_2(no_of_iterations):
     iterations_results_largest_coeff_fraction = []
     iterations_results_scipy = []
 
-    
+    counter = 0
+    np.random.seed(1)
     for i in range(no_of_iterations):
         #The formulas for m and n produce numbers between 10 and 100.
-        n = int(np.round(np.exp(np.log(190)*np.random.rand())+10))
-        m = int(np.round(np.exp(np.log(190)*np.random.rand())+10))
+        n = int(np.round(np.exp(np.log(140)*np.random.rand())+10))
+        m = int(np.round(np.exp(np.log(140)*np.random.rand())+10))
         print("n: " + str(n) + " m: " + str(m))
         c,A,b = random_lp(n,m)
 
@@ -678,7 +690,9 @@ def run_experiment_2(no_of_iterations):
         total_time_fraction = t3-t2
         iterations_results_largest_increase_float.append((n,m,total_time_float, res_float))
         iterations_results_largest_increase_fraction.append((n,m,total_time_fraction, res_fraction))
-    
+        print(counter)
+        counter+=1
+
     np.save("./results/iterations_results_largest_coefficient_float.npy",iterations_results_largest_coeff_float, allow_pickle = True)
     np.save("./results/iterations_results_largest_coefficient_fraction.npy",iterations_results_largest_coeff_fraction, allow_pickle = True)
 
@@ -691,11 +705,12 @@ def run_experiment_2(no_of_iterations):
 def run_experiment_inter_vs_fraction_pivot(no_of_iterations):
     iterations_results_largest_increase_int = []
     iterations_results_largest_increase_fraction = []
-
+    counter = 0
+    np.random.seed(0)
     for i in range(no_of_iterations):
         #The formulas for m and n produce numbers between 10 and 100.
-        n = int(np.round(np.exp(np.log(140)*np.random.rand())+10))
-        m = int(np.round(np.exp(np.log(140)*np.random.rand())+10))
+        n = 117#int(np.round(np.exp(np.log(140)*np.random.rand())+10))
+        m = 120#int(np.round(np.exp(np.log(140)*np.random.rand())+10))
         print("n: " + str(n) + " m: " + str(m))
         c,A,b = random_lp(n,m)
         
@@ -710,7 +725,8 @@ def run_experiment_inter_vs_fraction_pivot(no_of_iterations):
 
         iterations_results_largest_increase_int.append((n,m,total_time_int, res_int))
         iterations_results_largest_increase_fraction.append((n, m, total_time_fraction, res_fraction))
-    
+        print(counter)
+        counter +=1
     np.save("./results/integer/iterations_results_largest_increase_integer.npy",iterations_results_largest_increase_int, allow_pickle = True)
     np.save("./results/integer/iterations_results_largest_increase_fraction.npy",iterations_results_largest_increase_fraction,  allow_pickle = True)
     
