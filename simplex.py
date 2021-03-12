@@ -150,7 +150,7 @@ class Dictionary:
         else:
             return self.C[0,0]
 
-    def pivot(self,k,l):
+    def pivot(self,k,l, eps):
         # Pivot Dictionary with N[k] entering and B[l] leaving
         # Performs integer pivoting if self.dtype==int
         
@@ -171,8 +171,8 @@ class Dictionary:
             if(row_index != l+1):
                 leaving_value = self.C[row_index, k+1]
                 if(self.dtype == int):
-                    leaving_ratio = ratio_int(leaving_value, a)
-                else: leaving_ratio = ratio(leaving_value, a)
+                    leaving_ratio = ratio_int(leaving_value, a, eps)
+                else: leaving_ratio = ratio(leaving_value, a, eps)
                 self.C[row_index, :] = self.C[row_index, :] - leaving_ratio * self.C[l+1, :]
                 self.C[row_index, k+1] = leaving_ratio
         
@@ -230,7 +230,7 @@ def bland(D,eps):
         coefficient_entering = constraint_coeff_entering[index]
         constraint_constant = constraint_constants[index]
         constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
-        if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
+        if ( constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):
             tightest_ratio = constraint_ratio
             leaving_candidates = []
             leaving_candidates.append(D.B[index])
@@ -248,7 +248,7 @@ def bland(D,eps):
             leaving = index
     return entering, leaving
     
-def ratio(x, y, eps=0):
+def ratio(x, y, eps):
     if( y == 0):
         return 0
     temp = x/y
@@ -256,7 +256,7 @@ def ratio(x, y, eps=0):
         temp = 0 #eps>=0 is such that numbers in the closed interval [-eps,eps]
     return temp
 
-def ratio_int(x, y, eps=0):
+def ratio_int(x, y, eps):
     if( y == 0):
         return 0
     temp = x//y
@@ -332,11 +332,15 @@ def largest_increase(D,eps):
                 constraint_constant = D.C[B_i+1,0]
                 coefficient_entering = D.C[B_i+1,N_i+1]
                 constraint_ratio = ratio(constraint_constant, coefficient_entering, eps)
-                if (constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):  #Is last condition right???
+                if (constraint_ratio > tightest_ratio and constraint_ratio <= 0 and coefficient_entering < 0):
                     tightest_ratio = constraint_ratio
                     leaving_index = B_i
-        if(abs(tightest_ratio)*obj_entering_coeff > entering_increase):
-            entering_increase = abs(tightest_ratio)*obj_entering_coeff
+        # if(obj_entering_coeff == 0):
+        #     entering_inc = 0
+        # else:
+        entering_inc = abs(tightest_ratio)*obj_entering_coeff
+        if(entering_inc > entering_increase):
+            entering_increase = entering_inc
             entering = N_i
             leaving = leaving_index
     return entering, leaving
@@ -346,24 +350,24 @@ def check_if_degenerate(D):
     contains_0 = 0 in coefficient_col
     return contains_0
 
-def find_and_perform_pivots(D, pivotrule=lambda D: bland(D,eps=0)):
+def find_and_perform_pivots(D, eps, pivotrule=lambda D, eps: bland(D,eps)):
     is_degenerate = check_if_degenerate(D)
     degenerate_count = 0
     if(is_degenerate):
         degenerate_count += 1   
-    k,l = pivotrule(D)
+    k,l = pivotrule(D, eps)
     res = None, None
     while (k != None and l != None):
-        D.pivot(k,l)
+        D.pivot(k,l, eps)
         is_degenerate = check_if_degenerate(D)
         if(is_degenerate):
             degenerate_count += 1
         else:
             degenerate_count = 0
         if (degenerate_count >= (D.B.size)):
-            k, l = bland(D, eps=0)
+            k, l = bland(D, eps)
         else:
-            k, l = pivotrule(D)
+            k, l = pivotrule(D, eps)
     if(k != None and l == None):
         res = LPResult.UNBOUNDED, None
     if(k == None):
@@ -418,7 +422,7 @@ def insert_new_obj_func(D, original_obj_func, original_non_basic):
     return D
     
 
-def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
+def phase1_alg(D, eps, pivotrule=lambda D, eps: bland(D,eps)):
     #insert new obj func and remeber old one
     original_obj_func = copy.deepcopy(D.C[0,1:])
     original_non_basic = copy.deepcopy(D.N)
@@ -428,7 +432,7 @@ def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
     #det dual of modified dictionary
     dual_D = get_dual_dictionary(D)
 
-    res, optimal_dual = find_and_perform_pivots(dual_D, pivotrule)
+    res, optimal_dual = find_and_perform_pivots(dual_D, eps, pivotrule)
     #If dual is unbounded, then primal is infeasible
     if(res == LPResult.UNBOUNDED):
         return res, None
@@ -440,7 +444,7 @@ def phase1_alg(D, pivotrule=lambda D: bland(D,eps=0)):
 
 
 
-def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbose=False):
+def lp_solve(c,A,b,dtype=Fraction,eps=1e-5,pivotrule=lambda D, eps: bland(D,eps),verbose=False):
     # Simplex algorithm
     # 
     # Input is LP in standard form given by vectors and matrices
@@ -469,37 +473,37 @@ def lp_solve(c,A,b,dtype=Fraction,eps=0,pivotrule=lambda D: bland(D,eps=0),verbo
     no_of_negative_constants1 = sum(n < 0 for n in constraint_constants)
     is_infeasible = 0 < no_of_negative_constants1
     if(is_infeasible):
-        res_phase1, D = phase1_alg(D, pivotrule)
+        res_phase1, D = phase1_alg(D, eps, pivotrule)
         if(res_phase1 is LPResult.UNBOUNDED):
             return LPResult.INFEASIBLE, D
-    res = find_and_perform_pivots(D, pivotrule)
+    res = find_and_perform_pivots(D, eps, pivotrule)
     return res
 
 def run_examples():
-    #test_integer_pivot1()
-    #floating_rounding_test()
+    test_integer_pivot1()
+    floating_rounding_test()
     #run_experiment_1(100)
     #print_experiment_1()
     #run_experiment_2(200)
     #run_experiment_inter_vs_fraction_pivot(200)
     #print_integer_experiment()
-    # test_integer_pivot()
+    test_integer_pivot()
     #print_experiment_2()
-    #test_correctness_of_algorithms(30)
-    # test_largest_coeff_example1()
-    # test_largest_increase_example1()
-    # test_2_6_phase()
-    # test_2_5_phase()
-    # test_2_7_phase()
-    # test_book_example()
-    #test_failing()
+    test_correctness_of_algorithms(10)
+    test_largest_coeff_example1()
+    test_largest_increase_example1()
+    test_2_6_phase()
+    test_2_5_phase()
+    test_2_7_phase()
+    test_book_example()
+    test_failing()
     #run_experiment_1phase_alg(100)
     return
 
 def floating_rounding_test():
-    res = ratio(0.000009,1)
+    res = ratio(0.000009,1, 1e-5)
     assert(res == 0)
-    res = ratio(0.00001,1)
+    res = ratio(0.00001,1, 1e-5)
     assert(res == 1.0e-5)
 
 
@@ -509,10 +513,10 @@ def test_integer_pivot1():
     d = Dictionary(c,A,b, dtype= int)
     entering, leaving = largest_coefficient(d, 1e-5)
     #print(d)
-    d.pivot(entering, leaving)
+    d.pivot(entering, leaving, 1e-5)
     entering, leaving = largest_coefficient(d, 1e-5)
     #print(d)
-    d.pivot(entering, leaving)
+    d.pivot(entering, leaving, 1e-5)
     #print(d)
     
 def test_integer_pivot():
@@ -537,7 +541,7 @@ def test_largest_increase_example1():
     c,A,b = exercise2_5()
     # assert(entering == 2)
     # assert(leaving == 2)
-    res = lp_solve(c,A,b, dtype=np.float64, pivotrule=lambda D: largest_increase(D,eps=0))
+    res = lp_solve(c,A,b, eps = 1e-5, dtype=np.float64, pivotrule=lambda D, eps: largest_increase(D,eps))
     
 def test_infeasible_primal_unbounded_dual():
     print("infeasible test of ex. 2.5")
@@ -558,7 +562,7 @@ def test_2_5_phase():
 
 def test_2_6_phase():
     c,A,b = exercise2_6() # infeasible
-    res, D = lp_solve(c,A,b, dtype=np.float64, pivotrule=lambda D: largest_coefficient(D, eps=0))
+    res, D = lp_solve(c,A,b, eps = 1e-5, dtype=np.float64, pivotrule=lambda D, eps: largest_coefficient(D, eps))
     res_linprog = linprog(-c,A,b, method="simplex")
     print(res)
     print(res_linprog.status)
@@ -581,24 +585,32 @@ def test_book_example():
 
 def test_failing():
     c,A,b = failing_example()
-    res, D = lp_solve(c,A,b, dtype=np.float64, pivotrule=lambda D: largest_coefficient(D, eps=0))
+    res, D = lp_solve(c,A,b, eps = 1e-5, dtype=np.float64, pivotrule=lambda D, eps: largest_coefficient(D, eps))
     res_linprog = linprog(-c,A,b, method="simplex")
     assert(res == LPResult.UNBOUNDED)
     assert(res_linprog.status == 3)
 
 
 def test_correctness_of_algorithms(number_of_iterations):
+    np.random.seed(1)
     for i in range(number_of_iterations):
         print(i)
-        n = int(np.round(np.exp(np.log(100)*np.random.rand()) + 10))
-        m = int(np.round(np.exp(np.log(100)*np.random.rand()) + 10))
+        n = int(np.round(np.exp(np.log(50)*np.random.rand()) + 10))
+        m = int(np.round(np.exp(np.log(50)*np.random.rand()) + 10))
         c,A,b = random_lp(n,m)
-        res_bland, D_bland = lp_solve(c,A,b)
-        res_largest_coeff, D_largest_coeff = lp_solve(c,A,b, pivotrule= lambda D: largest_coefficient(D, eps=0))
-        res_largest_increase, D_largest_increase = lp_solve(c,A,b, pivotrule= lambda D: largest_increase(D, eps=0))
-        res_bland_int, D_bland_int = lp_solve(c,A,b,pivotrule= lambda D: largest_increase(D, eps=0), dtype=int)
+        res_bland, D_bland = lp_solve(c,A,b, eps = 1e-5)
+        res_largest_coeff, D_largest_coeff = lp_solve(c,A,b, eps = 1e-5, pivotrule= lambda D, eps: largest_coefficient(D, eps))
+        res_largest_increase, D_largest_increase = lp_solve(c,A,b, eps = 1e-5, pivotrule= lambda D, eps: largest_increase(D, eps))
+        res_bland_int, D_bland_int = lp_solve(c,A,b, eps = 1e-5, pivotrule= lambda D, eps: largest_increase(D, eps), dtype=int)
         res_linprog = linprog(-c,A,b, method="simplex")
-        assert(res_bland == res_largest_coeff == res_largest_increase==res_bland_int)
+        try:
+            assert(res_bland == res_largest_coeff == res_largest_increase==res_bland_int)
+        except:
+            print(res_linprog.status)
+            print(res_bland)
+            print(res_largest_coeff)
+            print(res_largest_increase)
+            print(res_bland_int)
         if(res_bland == LPResult.OPTIMAL):
             try:
                 assert(D_bland.value() == D_largest_coeff.value() == D_largest_increase.value() == D_bland_int.value())
@@ -635,11 +647,11 @@ def run_experiment_1(no_of_iterations):
         print("n is: "+ str(n))
         
         t0 = time.time()
-        res_float, D = lp_solve(c,A,b, dtype = np.float64)
+        res_float, D = lp_solve(c,A,b, eps = 1e-5, dtype = np.float64)
         t1 = time.time()
         total_time_float = t1-t0
         t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction)
+        res_fraction, D = lp_solve(c,A,b, eps = 1e-5, dtype = Fraction)
         t3 = time.time()   
         total_time_fraction = t3-t2
         iterations_results_float.append((n,m,total_time_float, res_float))
@@ -654,7 +666,7 @@ def run_experiment_2(no_of_iterations):
     iterations_results_largest_coeff_float = []
     iterations_results_largest_coeff_fraction = []
     iterations_results_scipy = []
-
+    eps = 1e-5
     counter = 0
     np.random.seed(1)
     for i in range(no_of_iterations):
@@ -674,22 +686,22 @@ def run_experiment_2(no_of_iterations):
         iterations_results_scipy.append((n,m, total_time_scipy))
         
         t0 = time.time()
-        res_float, D = lp_solve(c,A,b, dtype = np.float64, pivotrule = lambda D: largest_coefficient(D, eps=0))
+        res_float, D = lp_solve(c,A,b, eps = 1e-5, dtype = np.float64, pivotrule = lambda D, eps: largest_coefficient(D, eps))
         t1 = time.time()
         total_time_float = t1-t0
         t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction, pivotrule = lambda D: largest_coefficient(D, eps=0))
+        res_fraction, D = lp_solve(c,A,b, eps = 1e-5, dtype = Fraction, pivotrule = lambda D, eps: largest_coefficient(D, eps))
         t3 = time.time()   
         total_time_fraction = t3-t2
         iterations_results_largest_coeff_float.append((n,m,total_time_float, res_float))
         iterations_results_largest_coeff_fraction.append((n,m,total_time_fraction, res_fraction))
 
         t0 = time.time()
-        res_float, D = lp_solve(c,A,b, dtype = np.float64, pivotrule = lambda D: largest_increase(D, eps=0))
+        res_float, D = lp_solve(c,A,b, eps = 1e-5, dtype = np.float64, pivotrule = lambda D, eps: largest_increase(D, eps))
         t1 = time.time()
         total_time_float = t1-t0
         t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction, pivotrule = lambda D: largest_increase(D, eps=0))
+        res_fraction, D = lp_solve(c,A,b, eps = 1e-5, dtype = Fraction, pivotrule = lambda D, eps: largest_increase(D, eps))
         t3 = time.time()   
         total_time_fraction = t3-t2
         iterations_results_largest_increase_float.append((n,m,total_time_float, res_float))
@@ -719,11 +731,11 @@ def run_experiment_inter_vs_fraction_pivot(no_of_iterations):
         c,A,b = random_lp(n,m)
         
         t0 = time.time()
-        res_int, D = lp_solve(c,A,b, dtype = int, pivotrule = lambda D: largest_coefficient(D, eps=0))
+        res_int, D = lp_solve(c,A,b,eps = 1e-5, dtype = int, pivotrule = lambda D, eps: largest_coefficient(D, eps))
         t1 = time.time()
         total_time_int = t1-t0
         t2 = time.time()
-        res_fraction, D = lp_solve(c,A,b, dtype = Fraction, pivotrule = lambda D: largest_coefficient(D, eps=0))
+        res_fraction, D = lp_solve(c,A,b,eps = 1e-5, dtype = Fraction, pivotrule = lambda D, eps: largest_coefficient(D, eps))
         t3 = time.time()   
         total_time_fraction = t3-t2
 
@@ -818,12 +830,14 @@ def print_integer_experiment():
     plt.show()
 
 def run_and_print_experiments():
-    run_experiment_1()
-    run_experiment_2()
-    run_experiment_inter_vs_fraction_pivot()
+    run_experiment_1(5)
+    run_experiment_2(5)
+    run_experiment_inter_vs_fraction_pivot(5)
     print_experiment_1()
     print_experiment_2()
     print_integer_experiment()
 
-run_and_print_experiments()
+run_examples()
+test_correctness_of_algorithms(20)
+#run_and_print_experiments()
 
