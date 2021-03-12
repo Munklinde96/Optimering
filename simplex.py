@@ -830,14 +830,14 @@ def print_integer_experiment():
     plt.show()
 
 def run_and_print_experiments():
-    run_experiment_1(5)
-    run_experiment_2(5)
-    run_experiment_inter_vs_fraction_pivot(5)
+    run_experiment_1(100)
+    run_experiment_2(200)
+    run_experiment_inter_vs_fraction_pivot(200)
     print_experiment_1()
     print_experiment_2()
     print_integer_experiment()
 
-run_examples()
-test_correctness_of_algorithms(20)
-#run_and_print_experiments()
+#run_examples()
+#test_correctness_of_algorithms(20)
+run_and_print_experiments()
 
